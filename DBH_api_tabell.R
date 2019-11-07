@@ -12,54 +12,61 @@
 #' @export
 #'
 #' @examples
-dbh_json_query <- function(tabell_id,
-  filters=list(),
-  group_by =list(),
-  sort_by = list(), exclude=NULL){
-  
-  obj <- list(query = list())
-  for (i in seq_along( filters)) {
+dbh_json_query <-
+  function(tabell_id,
+           filters = list(),
+           group_by = list(),
+           sort_by = list(),
+           exclude = NULL) {
     
-    obj$query[[i]] <- list(variabel = enc2utf8(names(filters)[i]) ,
-      selection = list(filter = "item", values = purrr::map(filters[[i]] ,enc2utf8 )  ))
-    if (filters[[i]][1] == "*") {
+    filter_query <- list()
+    exclude_warning <- character(0)
       
-      obj$query[[i]]$selection$filter <- "all"
-      for (j in seq_along(exclude)) {
-        if (enc2utf8(names(filters)[i]) == enc2utf8(names(exclude)[j])) {
-          obj$query[[i]]$selection$exclude = purrr::map(exclude[[j]],enc2utf8 )}
-        
+      for (i in seq_along(filters)) {
+        filter_query[[i]] <-
+          list(variabel = enc2utf8(names(filters)[i]),
+               selection = list(filter = "item",
+                                values = lapply(filters[[i]],
+                                                function(s) enc2utf8(as.character(s)))))
+        if (filters[[i]][1] == "*") {
+          filter_query[[i]]$selection$filter <- "all"
+          if (names(filters)[i] %in% names(exclude)) {
+            filter_query[[i]]$selection$exclude = lapply(exclude[[names(filters)[i]]],
+                                                         function(s) enc2utf8(as.character(s)))
+          }
+        } else if (filters[[i]][1] %in% c("top",  "lessthan", "greaterhan")) {
+          filter_query[[i]]$selection$filter <- paste0(filters[[i]][1]) # Hva gjør paste0 her?
+          filter_query[[i]]$selection$values <- lapply(filters[[i]][2],
+                                                       function(s) enc2utf8(as.character(s)))
+          if (names(filters)[i] %in% names(exclude)) {
+            filter_query[[i]]$selection$exclude = lapply(exclude[[names(filters)[i]]],
+                                                         function(s) enc2utf8(as.character(s)))
+          }
+        } else if (filters[[i]][1] == "between") {
+          filter_query[[i]]$selection$filter <- "between"
+          filter_query[[i]]$selection$values <- vapply(filters[[i]][-1],
+                                                       function(s) enc2utf8(as.character(s)),
+                                                       1)
+          if (names(filters)[i] %in% names(exclude)) {
+            filter_query[[i]]$selection$exclude = lapply(exclude[[names(filters)[i]]],
+                                                         function(s) enc2utf8(as.character(s)))
+          }
+        } else if (names(filters)[i] %in% names(exclude)) {
+          exclude_warning <-
+            paste0(ifelse(length(exclude_warning) == 0,
+                          "Excluding filters cannot be combined with the item filter for the following variables: ",
+                          paste0(exclude_warning, ", ")),
+                   names(filters)[i])
+        }
       }
-    }
-    else if (filters[[i]][1] %in% c("top",  "lessthan", "greathan"))
-    {obj$query[[i]]$selection$filter <- paste0(filters[[i]][1])
-    obj$query[[i]]$selection$values <- purrr::map( filters[[i]][2],enc2utf8 )
-    for (j in seq_along(exclude)) {
-      if (enc2utf8(names(filters)[i]) == enc2utf8(names(exclude)[j])) {
-        obj$query[[i]]$selection$exclude = purrr::map(exclude[[j]],enc2utf8 )}
-      
-    }
     
-    }
-    else if (filters[[i]][1] == "between")
-    {obj$query[[i]]$selection$filter <- "between"
-    obj$query[[i]]$selection$values <- c(map( filters[[i]][2],enc2utf8 ),map( filters[[i]][3],enc2utf8 ))
-    for (j in seq_along(exclude)) {
-      if (enc2utf8(names(filters)[i]) == enc2utf8(names(exclude)[j])) {
-        obj$query[[i]]$selection$exclude = purrr::map(exclude[[j]],enc2utf8 )}
-      
-    }
+    if (length(exclude_warning) != 0) warning(exclude_warning)
     
-    }
+    return(list(tabell_id = tabell_id ,
+                groupBy = lapply(group_by, function(s) enc2utf8(as.character(s))),
+                sortBy = lapply(sort_by, function(s) enc2utf8(as.character(s))),
+                filter = filter_query))
   }
-  
-  spørring <- list(tabell_id = tabell_id ,
-    groupBy = purrr::map(group_by, enc2utf8),
-    sortBy = purrr::map(sort_by, enc2utf8),
-    filter = obj$query)
-  spørring
-  
-}
 
 
 #'  Get data from dbh api as R dataframe
